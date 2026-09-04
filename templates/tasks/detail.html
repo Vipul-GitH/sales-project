@@ -1,0 +1,18 @@
+{% extends 'base.html' %}
+{% from 'components/macros.html' import status %}
+{% block content %}
+<div class="page-head"><div><div class="breadcrumb"><a href="{{url_for('my_tasks')}}">Tasks</a> / {{task.title}}</div><h1>{{task.title}}</h1><p class="text-muted">{{task.account or 'Internal task'}} · {{task.task_type}}</p></div>{% if task.status=='Pending' %}<div class="d-flex gap-2"><a class="btn btn-outline-primary" href="{{url_for('task_form',task_id=task.id)}}">Edit / reschedule</a><a class="btn btn-primary" href="{{url_for('complete_task',task_id=task.id)}}">Complete</a></div>{% endif %}</div>
+<div class="card form-card mb-3"><div class="card-body"><dl class="row mb-0">
+  <dt class="col-sm-4">Assigned to</dt><dd class="col-sm-8">{{task.assignee}}</dd>
+  <dt class="col-sm-4">Assigned by</dt><dd class="col-sm-8">{{task.assigned_by}}</dd>
+  <dt class="col-sm-4">Due</dt><dd class="col-sm-8">{{task.due_at}}{% if task.revised_due_at %}<small class="d-block">Original date: {{task.original_due_at}}</small>{% endif %}</dd>
+  <dt class="col-sm-4">Priority</dt><dd class="col-sm-8">{{status(task.priority)}}</dd>
+  <dt class="col-sm-4">Status</dt><dd class="col-sm-8">{{status(task.status)}}</dd>
+  <dt class="col-sm-4">Details</dt><dd class="col-sm-8">{{task.details or 'No additional details.'}}</dd>
+  {% if task.completion_notes %}<dt class="col-sm-4">Completion notes</dt><dd class="col-sm-8">{{task.completion_notes}}</dd>{% endif %}
+  {% if task.cancelled_reason %}<dt class="col-sm-4">Cancellation reason</dt><dd class="col-sm-8">{{task.cancelled_reason}}</dd>{% endif %}
+</dl></div></div>
+<div class="card audit-card"><div class="card-header"><h5><i class="bi bi-clock-history me-2"></i>Complete audit history</h5></div><div class="audit-timeline">
+{% for log in audit_rows %}<div class="audit-event"><span class="audit-dot"></span><div class="audit-event-head"><div><b>{{log.action}}</b><span>by {{log.performed_by}}</span></div><time>{{log.created_at}}</time></div>{% if log.changes %}<div class="audit-changes">{% for change in log.changes %}<div><strong>{{change.label}}</strong><span>{% if change.old is not none %}<del>{{change.old}}</del><i class="bi bi-arrow-right"></i>{% endif %}<ins>{{change.new if change.new is not none else 'Removed'}}</ins></span></div>{% endfor %}</div>{% endif %}</div>{% else %}<div class="card-body text-muted">No audit events recorded for this older task yet.</div>{% endfor %}
+</div></div>
+{% endblock %}

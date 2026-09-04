@@ -1,0 +1,19 @@
+{% extends 'base.html' %}
+{% from 'components/account_combobox.html' import account_combobox %}
+{% block content %}
+<div class="page-head"><div><div class="breadcrumb"><a href="{{url_for('activities')}}">Activities</a> / Schedule</div><h1>Schedule activity</h1><p class="text-muted">The scheduled item will appear on its date. Record the actual activity after it happens.</p></div></div>
+<form method="post" class="card form-card"><div class="card-body row g-3">
+  <div class="col-md-6"><label class="form-label required">Account</label>{{account_combobox(accounts)}}</div>
+  <div class="col-md-3"><label class="form-label required">Activity type</label><select name="activity_type" class="form-select"><option>Visit</option><option>Phone Call</option><option>WhatsApp/Message</option><option>Email</option><option>Quotation Shared</option><option>Other</option></select></div>
+  <div class="col-md-3"><label class="form-label required">Title</label><input name="title" class="form-control" required placeholder="e.g. Monthly review visit"></div>
+  <div class="col-md-3"><label class="form-label required">Scheduled date</label><input name="scheduled_for" type="date" class="form-control" required></div>
+  <div class="col-md-3"><label class="form-label">Time</label><input name="scheduled_time" type="time" class="form-control"></div>
+  <div class="col-md-3"><label class="form-label">Assign to</label><select name="assigned_to_id" class="form-select">{% for u in marketing_users %}<option value="{{u.id}}">{{u.name}}</option>{% endfor %}</select></div>
+  <div class="col-md-3"><label class="form-label">Priority</label><select name="priority" class="form-select"><option>High</option><option selected>Normal</option><option>Low</option></select></div>
+  <div class="col-md-4"><label class="form-label">Repeat</label><select name="recurrence_type" class="form-select recurrence"><option>One time</option><option>Weekly</option><option>Monthly</option><option>Custom days</option></select></div>
+  <div class="col-md-4 recurrence-weekly d-none"><label class="form-label">Weekday</label><select name="weekday" class="form-select"><option value="">Select weekday</option>{% for d in ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'] %}<option>{{d}}</option>{% endfor %}</select></div>
+  <div class="col-md-4 recurrence-monthly d-none"><label class="form-label">Day of month</label><input name="month_day" type="number" min="1" max="31" class="form-control"></div>
+  <div class="col-md-4 recurrence-custom d-none"><label class="form-label">Repeat every number of days</label><input name="custom_days" type="number" min="1" class="form-control"></div>
+  <div class="col-12"><label class="form-label">Instructions</label><textarea name="details" class="form-control"></textarea></div>
+</div><div class="card-footer text-end"><button class="btn btn-primary">Schedule activity</button></div></form>
+{% endblock %}

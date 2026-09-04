@@ -1,0 +1,28 @@
+{% extends 'base.html' %}
+{% from 'components/macros.html' import status %}
+{% block content %}
+<div class="page-head">
+  <div><div class="breadcrumb">Administration / Users</div><h1>{{ 'Add user' if action == 'add' else 'Users' }}</h1><p class="text-muted">Manage internal users and project roles.</p></div>
+  {% if action != 'add' %}<a class="btn btn-primary" href="{{ url_for('users_page', action='add') }}">Add user</a>{% endif %}
+</div>
+{% if action == 'add' %}
+<form method="post" class="card form-card">
+  <div class="card-body row g-3">
+    <div class="col-md-6"><label class="form-label required">Name / Login name</label><input name="full_name" class="form-control" required></div>
+    <div class="col-md-3"><label class="form-label required">DOB</label><input name="dob" class="form-control" placeholder="DD/MM/YYYY" pattern="\d{2}/\d{2}/\d{4}" required><small class="text-muted">Initial password is DOB without slashes.</small></div>
+    <div class="col-md-3"><label class="form-label">Contact</label><input name="contact" class="form-control"></div>
+    <div class="col-md-4"><label class="form-label required">Role</label><select name="role" class="form-select"><option>Executive</option><option>Team Leader</option><option>Admin</option></select></div>
+    <div class="col-md-4"><label class="form-label">Status</label><select name="status" class="form-select"><option>Active</option><option>Inactive</option></select></div>
+    <div class="col-md-4"><label class="form-label">Designation</label><input name="designation" class="form-control"></div>
+    <div class="col-md-6"><label class="form-label">Departments</label><input name="departments" class="form-control"></div>
+    <div class="col-md-6"><label class="form-label">Department ID</label><input name="department_id" type="number" class="form-control"></div>
+  </div>
+  <div class="card-footer text-end"><a class="btn btn-light" href="{{ url_for('users_page') }}">Cancel</a><button class="btn btn-primary">Create user</button></div>
+</form>
+{% else %}
+<div class="card table-card">
+  <div class="card-body border-bottom"><label class="form-label" for="userSearch">Find a sales user</label><input id="userSearch" class="form-control" list="activeUsers" placeholder="Start typing a name…"><datalist id="activeUsers">{% for u in suggestion_users %}<option value="{{ u.name }}">{{ u.role }}</option>{% endfor %}</datalist></div>
+  <table class="table align-middle"><thead><tr><th>User</th><th>Role</th><th>Status</th></tr></thead><tbody>{% for u in suggestion_users %}<tr><td><b>{{ u.name }}</b></td><td>{{ status(u.role) }}</td><td>{{ status('Active' if u.active else 'Inactive') }}</td></tr>{% else %}<tr><td colspan="3" class="text-center text-muted py-4">No sales users found.</td></tr>{% endfor %}</tbody></table>
+</div>
+{% endif %}
+{% endblock %}

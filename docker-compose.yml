@@ -1,0 +1,39 @@
+services:
+  db:
+    image: mariadb:11.4
+    restart: unless-stopped
+    environment:
+      MARIADB_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?Set MYSQL_ROOT_PASSWORD in .env}
+      MARIADB_DATABASE: referral_sales
+    volumes:
+      - sales_db_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  app:
+    build: .
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "3020:3020"
+    environment:
+      REFERRAL_DB_HOST: db
+      REFERRAL_DB_PORT: 3306
+      REFERRAL_DB_USER: root
+      REFERRAL_DB_PASSWORD: ${MYSQL_ROOT_PASSWORD:?Set MYSQL_ROOT_PASSWORD in .env}
+      REFERRAL_DB_NAME: referral_sales
+      REFERRAL_SECRET_KEY: ${REFERRAL_SECRET_KEY:?Set REFERRAL_SECRET_KEY in .env}
+      WEB_WORKERS: ${WEB_WORKERS:-2}
+    volumes:
+      - ./certs:/app/certs:ro
+      - sales_uploads:/app/static/uploads/demo
+
+volumes:
+  sales_db_data:
+  sales_uploads:
+

@@ -1,0 +1,33 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="auth-wrap"><div class="auth-card">
+  <div class="text-center mb-4">
+    <div class="auth-brand-logo mx-auto mb-3"><img src="{{ url_for('static', filename='images/dr-bhasins-lab-logo.png', v=2) }}" alt="Dr. Bhasin's Lab"></div>
+    <h1>Welcome back</h1><p>Referral Sales Follow-up System</p>
+  </div>
+  <form method="post">
+    <label class="form-label" for="loginUser">User name</label>
+    <div class="user-combobox mb-3" data-user-combobox>
+      <div class="user-search-control">
+        <i class="bi bi-person" aria-hidden="true"></i>
+        <input id="loginUser" class="form-control" name="login_id" autocomplete="off" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="loginUserSuggestions" placeholder="Type or select a user" required autofocus>
+        <button class="user-search-toggle" type="button" aria-label="Show users" tabindex="-1"><i class="bi bi-chevron-down"></i></button>
+      </div>
+      <div id="loginUserSuggestions" class="user-suggestions" role="listbox" hidden>
+        {% for u in login_users %}
+        <button type="button" class="user-suggestion" role="option" data-user-name="{{ u.name|e }}" data-search="{{ (u.name ~ ' ' ~ u.role)|lower|e }}">
+          <span class="user-suggestion-avatar">{{ u.initials }}</span>
+          <span class="user-suggestion-copy"><strong>{{ u.name }}</strong><small>{{ u.role }}</small></span>
+          <span class="user-role-badge user-role-{{ u.role|lower|replace(' ', '-') }}">{{ u.role }}</span>
+        </button>
+        {% endfor %}
+        <div class="user-suggestion-empty" hidden>No matching active user</div>
+      </div>
+    </div>
+    <label class="form-label">Password</label>
+    <input type="password" class="form-control mb-4" name="password" autocomplete="current-password" required>
+    <small class="text-muted d-block mb-3">Initial password: DOB without slashes (DDMMYYYY)</small>
+    <button class="btn btn-primary w-100">Sign in</button>
+  </form>
+</div></div>
+{% endblock %}

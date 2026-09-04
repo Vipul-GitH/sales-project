@@ -1,0 +1,11 @@
+{% macro account_combobox(accounts, selected_id=None) %}
+{% set selected = namespace(name='') %}{% for account in accounts %}{% if selected_id and account.id == selected_id %}{% set selected.name = account.name %}{% endif %}{% endfor %}
+<div class="account-combobox" data-account-combobox>
+  <input type="hidden" name="account_id" value="{{selected_id or ''}}" data-account-id>
+  <div class="account-search-control"><i class="bi bi-building"></i><input type="text" class="form-control" value="{{selected.name}}" placeholder="Type account name to search…" autocomplete="off" required role="combobox" aria-autocomplete="list" aria-expanded="false"><button type="button" class="account-search-clear" aria-label="Clear selected account" hidden><i class="bi bi-x-lg"></i></button></div>
+  <div class="account-suggestions" role="listbox" hidden>
+    {% for account in accounts %}<button type="button" class="account-suggestion" role="option" data-account-id="{{account.id}}" data-account-name="{{account.name|e}}" data-search="{{(account.name ~ ' ' ~ account.area ~ ' ' ~ account.category)|lower|e}}"><span class="account-suggestion-icon"><i class="bi bi-building"></i></span><span><strong>{{account.name}}</strong><small>{{account.category}}{% if account.area %} · {{account.area}}{% endif %}</small></span></button>{% endfor %}
+    <div class="account-suggestion-empty" hidden>No matching account found.</div>
+  </div>
+</div>
+{% endmacro %}

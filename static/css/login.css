@@ -1,0 +1,148 @@
+.user-combobox {
+  position: relative;
+}
+
+.user-search-control {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.user-search-control > i {
+  position: absolute;
+  left: 13px;
+  z-index: 1;
+  color: #74818a;
+}
+
+.user-search-control .form-control {
+  height: 44px;
+  padding-left: 38px;
+  padding-right: 40px;
+  border-color: #ccd7da;
+}
+
+.user-search-control .form-control:focus {
+  border-color: var(--teal);
+  box-shadow: 0 0 0 .2rem #054e5d18;
+}
+
+.user-search-toggle {
+  position: absolute;
+  right: 5px;
+  width: 34px;
+  height: 34px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: #63737b;
+  display: grid;
+  place-items: center;
+}
+
+.user-search-toggle:hover {
+  background: #edf4f4;
+  color: var(--teal);
+}
+
+.user-suggestions {
+  position: absolute;
+  z-index: 30;
+  top: calc(100% + 6px);
+  left: 0;
+  right: 0;
+  max-height: 290px;
+  overflow-y: auto;
+  padding: 6px;
+  background: #fff;
+  border: 1px solid #d9e2e4;
+  border-radius: 10px;
+  box-shadow: 0 14px 32px #17353d24;
+}
+
+.user-suggestion {
+  width: 100%;
+  border: 0;
+  border-radius: 7px;
+  padding: 9px 10px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: #fff;
+  color: var(--ink);
+  text-align: left;
+}
+
+.user-suggestion:hover,
+.user-suggestion.is-active {
+  background: #edf7f5;
+}
+
+.user-suggestion-avatar {
+  width: 34px;
+  height: 34px;
+  flex: 0 0 34px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: #dcefeb;
+  color: var(--teal);
+  font-size: .72rem;
+  font-weight: 700;
+}
+
+.user-suggestion-copy {
+  min-width: 0;
+  flex: 1;
+}
+
+.user-suggestion-copy strong {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: .85rem;
+}
+
+.user-suggestion-copy small {
+  display: block;
+  margin-top: 1px;
+  color: #7a888f;
+  font-size: .69rem;
+}
+
+.user-role-badge {
+  flex: 0 0 auto;
+  border-radius: 20px;
+  padding: 3px 7px;
+  background: #edf1f2;
+  color: #59676e;
+  font-size: .62rem;
+  font-weight: 700;
+}
+
+.user-role-admin { background: #e4edf8; color: #365d8c; }
+.user-role-team-leader { background: #fff0d6; color: #8b5e14; }
+.user-role-executive { background: #e1f3ea; color: #27714f; }
+.user-suggestion-empty { padding: 18px 10px; text-align: center; color: #738188; font-size: .8rem; }
+
+.account-combobox { position: relative; }
+.account-search-control { position: relative; display: flex; align-items: center; }
+.account-search-control > i { position: absolute; left: 13px; z-index: 1; color: #74818a; }
+.account-search-control .form-control { padding-left: 38px; padding-right: 40px; }
+.account-search-clear { position: absolute; right: 5px; width: 34px; height: 34px; border: 0; border-radius: 6px; background: transparent; color: #63737b; }
+.account-search-clear:hover { background: #edf4f4; color: var(--teal); }
+.account-suggestions { position: absolute; z-index: 40; top: calc(100% + 6px); left: 0; right: 0; max-height: 290px; overflow-y: auto; padding: 6px; background: #fff; border: 1px solid #d9e2e4; border-radius: 10px; box-shadow: 0 14px 32px #17353d24; }
+.account-suggestion { width: 100%; padding: 10px; display: flex; align-items: center; gap: 10px; border: 0; border-radius: 7px; background: #fff; color: var(--ink); text-align: left; }
+.account-suggestion:hover, .account-suggestion.is-active { background: #edf7f5; }
+.account-suggestion-icon { width: 34px; height: 34px; flex: 0 0 34px; display: grid; place-items: center; border-radius: 8px; background: #dcefeb; color: var(--teal); }
+.account-suggestion > span:last-child { min-width: 0; }
+.account-suggestion strong, .account-suggestion small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.account-suggestion strong { font-size: .85rem; }
+.account-suggestion small { margin-top: 2px; color: #7a888f; font-size: .69rem; }
+.account-suggestion-empty { padding: 18px 10px; color: #738188; font-size: .8rem; text-align: center; }
+
+@media (max-width: 480px) {
+  .user-suggestions, .account-suggestions { max-height: min(42dvh, 260px); }
+  .user-role-badge { display: none; }
+}

@@ -1,0 +1,14 @@
+{% extends 'base.html' %}{% block content %}
+<div class="page-head"><h1>{{'Edit / reschedule task' if task else 'Add task'}}</h1></div>
+<form method="post" enctype="multipart/form-data" class="card form-card"><div class="card-body row g-3">
+<div class="col-md-6"><label class="form-label required">Task title</label><input name="title" class="form-control" required value="{{task.title if task else ''}}"></div>
+<div class="col-md-3"><label class="form-label required">Task type</label><select name="task_type" class="form-select">{% for x in ['Follow-up Call','Client Visit','Prepare/Send Quotation','Send Requested Information/Documents','Resolve Complaint/Service Issue','Collect Client Decision','Internal Coordination','Other'] %}<option {% if task and task.task_type==x %}selected{% endif %}>{{x}}</option>{% endfor %}</select></div>
+<div class="col-md-3"><label class="form-label required">Priority</label><select name="priority" class="form-select">{% for x in ['High','Normal','Low'] %}<option {% if (task and task.priority==x) or (not task and x=='Normal') %}selected{% endif %}>{{x}}</option>{% endfor %}</select></div>
+<div class="col-md-6"><label class="form-label">Related account</label><select name="account_id" class="form-select"><option value="">Internal task</option>{% for a in accounts %}<option value="{{a.id}}" {% if task and task.account_id==a.id %}selected{% endif %}>{{a.name}}</option>{% endfor %}</select></div>
+<div class="col-md-3"><label class="form-label required">Assigned to</label><select name="assigned_to_id" class="form-select">{% for u in marketing_users %}<option value="{{u.id}}" {% if task and task.assigned_to_id==u.id %}selected{% endif %}>{{u.name}}</option>{% endfor %}</select></div>
+<div class="col-md-3"><label class="form-label required">Due date</label><input name="due_date" type="date" class="form-control" required value="{{task.due_at.strftime('%Y-%m-%d') if task else ''}}"></div>
+<div class="col-md-4"><label class="form-label">Due time</label><input name="due_time" type="time" class="form-control" value="{{task.due_at.strftime('%H:%M') if task else ''}}"></div>
+<div class="col-md-8"><label class="form-label">Details</label><textarea name="details" class="form-control">{{task.details if task and task.details else ''}}</textarea></div>
+<div class="col-12"><label class="form-label">Attach files or photos</label><input name="attachments" type="file" multiple class="form-control" accept="image/*,.pdf,.doc,.docx,.xls,.xlsx"><input name="file_caption" class="form-control mt-2" placeholder="Optional file caption"></div>
+{% if task and task.revised_due_at %}<div class="col-12 text-muted small">Original due date retained: {{task.original_due_at}}</div>{% endif %}
+</div><div class="card-footer text-end"><button class="btn btn-primary">{{'Save changes' if task else 'Save task'}}</button></div></form>{% endblock %}

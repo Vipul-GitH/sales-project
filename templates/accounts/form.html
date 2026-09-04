@@ -1,0 +1,43 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="page-head"><h1>{{ 'Edit account' if account else 'Add lead or client' }}</h1></div>
+<form method="post" enctype="multipart/form-data" class="card form-card">
+  <div class="card-body row g-3">
+    <div class="col-md-4"><label class="form-label required">Account type</label><select name="account_type" class="form-select"><option {% if not account or account.account_type=='New Lead' %}selected{% endif %}>New Lead</option><option {% if account and account.account_type=='Existing Client' %}selected{% endif %}>Existing Client</option></select></div>
+    <div class="col-md-8"><label class="form-label required">Account name</label><input name="entity_name" class="form-control" value="{{ account.entity_name if account else '' }}" required></div>
+    <div class="col-md-4"><label class="form-label required">Category</label><select name="entity_category" class="form-select">{% for x in ['Doctor','Clinic','Hospital','Diagnostic Centre/Laboratory','Other'] %}<option {% if account and account.entity_category==x %}selected{% endif %}>{{ x }}</option>{% endfor %}</select></div>
+    <div class="col-md-4"><label class="form-label required">Area</label><input name="area" class="form-control" value="{{ account.area if account else '' }}" required></div>
+    <div class="col-md-4"><label class="form-label">Lead source</label><input name="lead_source" class="form-control" value="{{ account.lead_source if account else '' }}"></div>
+    <div class="col-md-4"><label class="form-label">Temperature</label><select name="lead_temperature" class="form-select"><option value="">Not applicable</option>{% for x in ['Hot','Warm','Cold'] %}<option {% if account and account.lead_temperature==x %}selected{% endif %}>{{ x }}</option>{% endfor %}</select></div>
+    <div class="col-md-4"><label class="form-label">Next follow-up</label><input name="next_follow_up_date" type="date" class="form-control" value="{{ account.next_follow_up_date if account and account.next_follow_up_date else '' }}"></div>
+    <div class="col-md-4"><label class="form-label required">Owner</label><select name="owner_id" class="form-select">{% for u in marketing_users %}<option value="{{u.id}}" {% if account and account.owner_id==u.id %}selected{% endif %}>{{u.name}}</option>{% endfor %}</select></div>
+    {% if account %}<div class="col-md-8"><label class="form-label">Reason if ownership changes</label><input name="ownership_reason" class="form-control" placeholder="Required when assigning the account to another owner"></div>{% endif %}
+    <div class="col-12"><label class="form-label">Notes</label><textarea name="notes" class="form-control">{{ account.notes if account and account.notes else '' }}</textarea></div>
+    <div class="col-12"><div class="d-flex justify-content-between align-items-center"><h5 class="mb-0">Add contacts</h5><button type="button" class="btn btn-sm btn-outline-primary add-contact">Add contact</button></div><div id="contactRows" class="row g-2 mt-1"><div class="col-md-4"><input name="contact_name" class="form-control" placeholder="Contact name"></div><div class="col-md-4"><input name="designation" class="form-control" placeholder="Designation"></div><div class="col-md-4"><input name="mobile" class="form-control" placeholder="Mobile"></div></div></div>
+    <div class="col-12"><label class="form-label">Add photos / files</label><input name="account_files" type="file" multiple class="form-control"><input name="file_caption" class="form-control mt-2" placeholder="Optional caption for uploaded files"></div>
+  </div>
+  <div class="card-footer text-end"><button class="btn btn-primary">Save account</button></div>
+</form>
+
+{% if account %}
+<div class="card mt-3"><div class="card-header"><h5 class="mb-0">Current contacts</h5></div><div class="card-body">
+{% for c in account_contacts %}
+  <form method="post" action="{{ url_for('update_contact', account_id=account.id, contact_id=c.id) }}" class="border rounded p-3 mb-3 row g-2">
+    <div class="col-md-3"><label class="form-label">Name</label><input name="full_name" class="form-control" value="{{c.full_name}}" required></div>
+    <div class="col-md-2"><label class="form-label">Designation</label><input name="designation" class="form-control" value="{{c.designation or ''}}"></div>
+    <div class="col-md-2"><label class="form-label">Mobile</label><input name="mobile" class="form-control" value="{{c.mobile}}" required></div>
+    <div class="col-md-2"><label class="form-label">Alternate</label><input name="alternate_mobile" class="form-control" value="{{c.alternate_mobile or ''}}"></div>
+    <div class="col-md-3"><label class="form-label">Email</label><input name="email" type="email" class="form-control" value="{{c.email or ''}}"></div>
+    <div class="col-12 d-flex align-items-center gap-3"><label><input type="checkbox" name="is_primary" {% if c.is_primary %}checked{% endif %}> Primary contact</label><button class="btn btn-sm btn-outline-primary">Update contact</button></div>
+  </form>
+  <form method="post" action="{{ url_for('archive_contact', account_id=account.id, contact_id=c.id) }}" class="d-flex gap-2 mb-3"><input name="archive_reason" class="form-control form-control-sm" placeholder="Reason to archive this contact (required)"><button class="btn btn-sm btn-outline-danger">Archive contact</button></form>
+{% else %}<p class="text-muted mb-0">No contacts saved yet.</p>{% endfor %}
+</div></div>
+<div class="card mt-3"><div class="card-header"><h5 class="mb-0">Current photos and files</h5></div><div class="card-body">
+{% for f in account_files %}
+  <div class="border rounded p-3 mb-3"><a target="_blank" href="{{url_for('static',filename='uploads/demo/'+f.stored_name)}}">{{f.original_name}}</a><small class="d-block text-muted">{{f.caption or 'No caption'}} · {{f.uploaded_at}}</small>
+  <form method="post" action="{{ url_for('archive_file', account_id=account.id, file_id=f.id) }}" class="d-flex gap-2 mt-2"><input name="archive_reason" class="form-control form-control-sm" placeholder="Reason to archive this file (required)"><button class="btn btn-sm btn-outline-danger">Archive file</button></form></div>
+{% else %}<p class="text-muted mb-0">No files saved yet.</p>{% endfor %}
+</div></div>
+{% endif %}
+{% endblock %}

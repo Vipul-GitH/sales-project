@@ -1,0 +1,17 @@
+{% extends 'base.html' %}
+{% from 'components/account_combobox.html' import account_combobox %}
+{% block content %}
+<div class="page-head"><h1>{{'Edit activity' if activity else 'Add activity'}}</h1></div>
+<form method="post" enctype="multipart/form-data" class="card form-card"><div class="card-body row g-3">
+  <div class="col-md-6"><label class="form-label required">Account</label>{{account_combobox(accounts, activity.account_id if activity else none)}}</div>
+  <div class="col-md-3"><label class="form-label required">Type</label><select name="activity_type" class="form-select">{% for x in ['Visit','Phone Call','WhatsApp/Message','Email','Quotation Shared','Complaint/Service Discussion','Other'] %}<option {% if activity and activity.activity_type==x %}selected{% endif %}>{{x}}</option>{% endfor %}</select></div>
+  <div class="col-md-3"><label class="form-label required">Date</label><input name="activity_date" type="date" class="form-control" required value="{{activity.interaction_at.strftime('%Y-%m-%d') if activity else ''}}"></div>
+  <div class="col-md-3"><label class="form-label">Time</label><input name="activity_time" type="time" class="form-control" value="{{activity.interaction_at.strftime('%H:%M') if activity else ''}}"></div>
+  <div class="col-md-9"><label class="form-label required">Meaningful notes</label><textarea name="notes" class="form-control" required>{{activity.notes if activity else ''}}</textarea></div>
+  <div class="col-md-6"><label class="form-label required">Next action</label><select name="next_action" class="form-select next-action"><option value="Create follow-up task" {% if not activity or activity.next_action=='Create follow-up task' %}selected{% endif %}>Create follow-up task</option><option value="No further action required" {% if activity and activity.next_action=='No further action required' %}selected{% endif %}>No further action required</option></select></div>
+  <div class="col-md-6"><label class="form-label">Delayed-entry / no-action reason</label><input name="delayed_reason" class="form-control" value="{{activity.delayed_entry_reason if activity and activity.delayed_entry_reason else ''}}"></div>
+  {% if not activity %}<div class="col-12 next-task-fields border rounded p-3"><h6>Next-action task</h6><div class="row g-2">
+    <div class="col-md-4"><label class="form-label">Task title</label><input name="task_title" class="form-control"></div><div class="col-md-3"><label class="form-label required">Due date</label><input name="task_due_date" type="date" class="form-control"></div><div class="col-md-2"><label class="form-label">Due time</label><input name="task_due_time" type="time" class="form-control"></div><div class="col-md-3"><label class="form-label">Assign to</label><select name="assigned_to_id" class="form-select">{% for u in users if u.active %}<option value="{{u.id}}">{{u.name}}</option>{% endfor %}</select></div><div class="col-md-3"><label class="form-label">Priority</label><select name="task_priority" class="form-select"><option>High</option><option selected>Normal</option><option>Low</option></select></div><div class="col-md-9"><label class="form-label">Task details</label><input name="task_details" class="form-control"></div>
+  </div></div>{% endif %}
+</div><div class="card-footer text-end"><button class="btn btn-primary">{{'Save changes' if activity else 'Save activity'}}</button></div></form>
+{% endblock %}
