@@ -144,13 +144,6 @@ a {
   background: #64c9a5;
 }
 
-.sidebar .nav-settings {
-  margin-top: 9px;
-  padding-top: 14px;
-  border-top: 1px solid #ffffff18;
-  border-radius: 0 0 7px 7px;
-}
-
 .auth-brand-logo {
   width: min(270px, 88%);
   height: 82px;

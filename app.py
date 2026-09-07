@@ -182,8 +182,6 @@ def authorize_record_access():
     if "user_id" not in session:
         return None
     endpoint = request.endpoint or ""
-    if endpoint == "users_page" and not is_admin():
-        return deny_access()
     if endpoint == "archived_accounts" and not is_admin():
         return deny_access()
     if has_management_scope():
@@ -689,44 +687,6 @@ def reports(report="tasks"):
         out = StringIO(); writer = csv.DictWriter(out, fieldnames=["item", "account", "owner", "status", "relevant_date"]); writer.writeheader(); writer.writerows(rows)
         return Response(out.getvalue(), mimetype="text/csv", headers={"Content-Disposition": f"attachment; filename={report}-report.csv"})
     return render_template("reports/index.html", report=report, report_rows=rows, filters=filters)
-
-@app.route("/users", methods=["GET"])
-@app.route("/users/<action>", methods=["GET", "POST"])
-def users_page(action=None):
-    if action == "add" and request.method == "POST":
-        name = request.form.get("full_name", "").strip()
-        dob = request.form.get("dob", "").strip()
-        initial_password = dob.replace("/", "")
-        selected_role = request.form.get("role", "Executive")
-        role_id = {"Admin": 1, "Team Leader": 2, "Executive": 3}.get(selected_role, 3)
-        if not (name and len(initial_password) == 8 and initial_password.isdigit()):
-            flash("Name and DOB in DD/MM/YYYY format are required.", "danger")
-        elif fetch_one("SELECT id FROM users WHERE name=%s", (name,)):
-            flash("That user name is already in use.", "danger")
-        else:
-            execute("""INSERT INTO users (name,contact,departments,role,role_id,status,dob,designation,department_id)
-                       VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
-                    (name, request.form.get("contact", "").strip(),
-                     request.form.get("departments") or None, selected_role, role_id,
-                     request.form.get("status", "Active"), dob, request.form.get("designation") or None,
-                     request.form.get("department_id") or None))
-            flash("User created successfully.", "success")
-            return redirect(url_for("users_page"))
-    return render_template("admin/users.html", action=action)
-
-@app.route("/profile", methods=["GET","POST"])
-def profile():
-    user = fetch_one("SELECT id,name,contact,dob FROM users WHERE id=%s", (session["user_id"],))
-    if request.method == "POST":
-        name, mobile = request.form.get("full_name", "").strip(), request.form.get("mobile", "").strip()
-        if not name:
-            flash("Name is required.", "danger")
-        else:
-            execute("UPDATE users SET name=%s,contact=%s WHERE id=%s", (name, mobile, session["user_id"]))
-            session["user_name"] = name
-            flash("Profile saved successfully.", "success")
-            return redirect(url_for("profile"))
-    return render_template("auth/profile.html", profile_user=user)
 
 if __name__ == "__main__":
     # Deliberately keep the prototype server simple and reloader-free for Windows use.

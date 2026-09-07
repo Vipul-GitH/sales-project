@@ -13,7 +13,7 @@ class WorkflowTests(unittest.TestCase):
         return self.client.post("/login", data={"login_id": user_id, "password": password}, follow_redirects=False)
 
     def test_protected_routes_require_session(self):
-        for url in ("/dashboard", "/accounts", "/activities", "/tasks", "/visits", "/reports/tasks", "/users", "/users/add"):
+        for url in ("/dashboard", "/accounts", "/activities", "/tasks", "/visits", "/reports/tasks"):
             response = self.client.get(url, follow_redirects=False)
             self.assertEqual(response.status_code, 302, url)
             self.assertEqual(response.headers["Location"], "/login", url)
@@ -35,15 +35,6 @@ class WorkflowTests(unittest.TestCase):
         self.client.get("/logout")
         response = self.client.get("/dashboard", follow_redirects=False)
         self.assertEqual(response.headers["Location"], "/login")
-
-    def test_user_creation_persists_and_duplicate_is_rejected(self):
-        self.login()
-        user_id = f"qa-user-{uuid4().hex[:8]}"
-        response = self.client.post("/users/add", data={"full_name": user_id, "dob": "01/01/2000", "contact": "9999999999", "role": "Executive"}, follow_redirects=False)
-        self.assertEqual(response.status_code, 302)
-        self.assertTrue(fetch_all("SELECT id FROM users WHERE name=%s", (user_id,)))
-        response = self.client.post("/users/add", data={"full_name": user_id, "dob": "01/01/2000", "contact": "9999999999", "role": "Executive"}, follow_redirects=True)
-        self.assertIn("already in use", response.get_data(as_text=True))
 
     def test_account_creation_persists_with_contact(self):
         self.login()
@@ -82,11 +73,8 @@ class WorkflowTests(unittest.TestCase):
         cancelled = fetch_all("SELECT status,cancelled_reason FROM tasks WHERE id=%s", (cancel_id,))[0]
         self.assertEqual((cancelled["status"], cancelled["cancelled_reason"]), ("Cancelled", "No longer needed"))
 
-    def test_profile_and_reports_are_data_backed(self):
+    def test_reports_are_data_backed(self):
         self.login()
-        profile = self.client.post("/profile", data={"full_name":"Dr Vipul Bhasin", "mobile":"9999900000"}, follow_redirects=True)
-        self.assertIn("Profile saved successfully", profile.get_data(as_text=True))
-        self.assertEqual(fetch_all("SELECT contact FROM users WHERE name=%s", ("Dr Vipul Bhasin",))[0]["contact"], "9999900000")
         report = self.client.get("/reports/tasks")
         self.assertIn("Export filtered CSV", report.get_data(as_text=True))
         export = self.client.get("/reports/tasks?export=csv")
