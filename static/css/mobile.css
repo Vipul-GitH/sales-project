@@ -313,11 +313,26 @@
     gap: 10px;
   }
 
-  .filter-scroll {
+  .filter-scroll,
+  .report-filter-bar .filter-scroll {
     display: grid;
     grid-template-columns: 1fr;
     width: 100%;
     overflow: visible;
+  }
+
+  .report-filter-field,
+  .report-filter-field input,
+  .report-filter-field select,
+  .report-filter-field:first-child input {
+    width: 100%;
+  }
+
+  .report-filter-actions {
+    display: grid !important;
+    grid-template-columns: 1fr 1fr;
+    width: 100%;
+    margin-top: 10px;
   }
 
   .filter-bar select,

@@ -444,6 +444,54 @@ a.list-group-item:hover {
   min-width: 210px;
 }
 
+.report-filter-bar {
+  display: block;
+  padding: 14px;
+}
+
+.report-filter-bar .filter-scroll {
+  display: grid;
+  grid-template-columns: 1.15fr 1.25fr .9fr 1fr 1fr;
+  gap: 12px;
+  overflow: visible;
+}
+
+.report-filter-field {
+  display: grid;
+  gap: 4px;
+}
+
+.report-filter-field label {
+  color: #61757d;
+  font-size: .68rem;
+  font-weight: 700;
+  letter-spacing: .035em;
+  text-transform: uppercase;
+}
+
+.report-filter-field input,
+.report-filter-field select {
+  width: 100%;
+  min-width: 0;
+}
+
+.report-filter-field:first-child input {
+  width: 100%;
+}
+
+.report-filter-actions {
+  justify-content: flex-end;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid #edf1f1;
+}
+
+@media (max-width: 1100px) {
+  .report-filter-bar .filter-scroll {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
 .filter-bar input:focus,
 .filter-bar select:focus {
   border-color: #7baab0;

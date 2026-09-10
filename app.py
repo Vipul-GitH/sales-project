@@ -128,7 +128,33 @@ def database_tasks():
         return []
 
 def selected_filters():
-    return {key: request.args.get(key, "").strip() for key in ("q", "owner", "status", "type")}
+    return {key: request.args.get(key, "").strip() for key in ("q", "owner", "status", "type", "from_date", "to_date")}
+
+
+def parse_filter_date(value):
+    if not value:
+        return None
+    try:
+        return datetime.strptime(value, "%Y-%m-%d").date()
+    except ValueError:
+        return None
+
+
+def filter_rows_by_date(rows, from_date=None, to_date=None):
+    def relevant_day(row):
+        value = row.get("relevant_date")
+        if isinstance(value, datetime):
+            return value.date()
+        if isinstance(value, date):
+            return value
+        try:
+            return datetime.fromisoformat(str(value)).date()
+        except (TypeError, ValueError):
+            return None
+
+    return [row for row in rows if (day := relevant_day(row)) is not None
+            and (from_date is None or day >= from_date)
+            and (to_date is None or day <= to_date)]
 
 def return_to(default_endpoint="my_tasks"):
     target = request.form.get("next") or request.args.get("next")
@@ -294,16 +320,25 @@ def account_detail(account_id):
 def account_form(account_id=None):
     if request.method == "POST":
         entity_name = request.form.get("entity_name", "").strip()
+        account_type = request.form.get("account_type", "").strip()
+        allowed_account_types = {"New Lead", "Existing Client"}
+        lifecycle_status = request.form.get("lifecycle_status", "Active").strip()
+        allowed_lifecycle_statuses = {"Active", "Converted", "Lost", "On Hold", "Inactive", "Archived"}
+        status_reason = request.form.get("status_reason", "").strip() or None
         owner_id = request.form.get("owner_id") or session.get("user_id")
         if not has_management_scope():
             owner_id = session["user_id"]
-        if not entity_name or not owner_id:
-            flash("Account name and owner are required.", "danger")
+        if not entity_name or not owner_id or account_type not in allowed_account_types:
+            flash("Account name, type and owner are required.", "danger")
+        elif lifecycle_status not in allowed_lifecycle_statuses:
+            flash("Select a valid account status.", "danger")
+        elif account_id and lifecycle_status != "Active" and not status_reason:
+            flash("A reason is required when the account is not Active.", "danger")
         else:
-            values = (request.form.get("account_type"), entity_name, request.form.get("entity_category"), request.form.get("area"), request.form.get("lead_source"), owner_id, request.form.get("lead_temperature") if request.form.get("account_type") == "New Lead" else None, request.form.get("next_follow_up_date") or None, request.form.get("notes"))
+            values = (account_type, entity_name, request.form.get("entity_category"), request.form.get("area"), request.form.get("lead_source"), owner_id, request.form.get("lead_temperature") if account_type == "New Lead" else None, request.form.get("next_follow_up_date") or None, request.form.get("notes"))
             if account_id:
                 previous = fetch_one("SELECT owner_id FROM accounts WHERE id=%s", (account_id,))
-                execute("UPDATE accounts SET account_type=%s,entity_name=%s,entity_category=%s,area=%s,lead_source=%s,owner_id=%s,lead_temperature=%s,next_follow_up_date=%s,notes=%s WHERE id=%s", values + (account_id,))
+                execute("UPDATE accounts SET account_type=%s,entity_name=%s,entity_category=%s,area=%s,lead_source=%s,owner_id=%s,lead_temperature=%s,next_follow_up_date=%s,notes=%s,lifecycle_status=%s,status_reason=%s WHERE id=%s", values + (lifecycle_status, None if lifecycle_status == "Active" else status_reason, account_id))
                 if previous and int(previous["owner_id"]) != int(owner_id):
                     execute("INSERT INTO ownership_history (account_id,previous_owner_id,new_owner_id,changed_by_id,reason) VALUES (%s,%s,%s,%s,%s)",
                             (account_id, previous["owner_id"], owner_id, session["user_id"], request.form.get("ownership_reason", "").strip() or "Owner updated from account edit"))
@@ -681,6 +716,18 @@ def reports(report="tasks"):
     if query: rows = [r for r in rows if query in " ".join(str(v or "") for v in r.values()).lower()]
     if filters["owner"]: rows = [r for r in rows if r["owner"] == filters["owner"]]
     if filters["status"]: rows = [r for r in rows if r["status"] == filters["status"]]
+    from_date = parse_filter_date(filters["from_date"])
+    to_date = parse_filter_date(filters["to_date"])
+    invalid_date = ((filters["from_date"] and from_date is None) or
+                    (filters["to_date"] and to_date is None))
+    if invalid_date:
+        flash("Enter valid report dates.", "danger")
+        rows = []
+    elif from_date and to_date and from_date > to_date:
+        flash("From date cannot be after To date.", "danger")
+        rows = []
+    elif from_date or to_date:
+        rows = filter_rows_by_date(rows, from_date, to_date)
     if request.args.get("export") == "csv":
         if role() != "Admin":
             flash("Only Admin can export reports.", "danger"); return redirect(url_for("reports", report=report))
