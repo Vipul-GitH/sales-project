@@ -21,6 +21,27 @@ document.addEventListener('DOMContentLoaded', () => {
   function syncFollowUpRequired(){ if(dueDate) dueDate.required = next?.value === 'Create follow-up task'; }
   next?.addEventListener('change', syncFollowUpRequired); syncFollowUpRequired();
 
+  const leadPhone = document.querySelector('#leadPhone');
+  const leadAltPhone = document.querySelector('#leadAltPhone');
+  document.querySelector('.lead-swap-numbers')?.addEventListener('click', () => {
+    [leadPhone.value, leadAltPhone.value] = [leadAltPhone.value, leadPhone.value];
+    leadPhone.focus();
+  });
+  const leadFiles = document.querySelector('#leadPrescription');
+  const leadFileList = document.querySelector('.lead-file-list');
+  leadFiles?.addEventListener('change', () => {
+    const files = [...leadFiles.files];
+    if (files.length > 6) {
+      leadFiles.value = '';
+      leadFiles.setCustomValidity('Select a maximum of 6 files.');
+      leadFiles.reportValidity();
+      leadFileList.textContent = 'No files selected';
+      return;
+    }
+    leadFiles.setCustomValidity('');
+    leadFileList.textContent = files.length ? `${files.length} file${files.length > 1 ? 's' : ''} selected: ${files.map(file => file.name).join(', ')}` : 'No files selected';
+  });
+
   document.querySelectorAll('table.table').forEach(table => {
     table.classList.add('responsive-table');
     const labels = [...table.querySelectorAll('thead th')].map(th => th.textContent.trim());

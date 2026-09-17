@@ -15,4 +15,5 @@ certs/*.pem
 # User uploads are runtime data, not source code.
 static/uploads/demo/*
 !static/uploads/demo/.gitkeep
-
+static/uploads/leads/*
+!static/uploads/leads/.gitkeep

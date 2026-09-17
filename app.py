@@ -2,6 +2,7 @@ from datetime import date, datetime, timedelta
 import calendar
 import json
 import os
+import re
 from pathlib import Path
 from uuid import uuid4
 from flask import Flask, Response, flash, redirect, render_template, request, session, url_for
@@ -9,10 +10,13 @@ import csv
 from io import StringIO
 from werkzeug.utils import secure_filename
 from database import execute, fetch_all, fetch_one
+from odt_database import odt_connection
 
 app = Flask(__name__)
 app.config["SECRET_KEY"] = os.getenv("REFERRAL_SECRET_KEY", "local-development-only-change-me")
 UPLOAD_DIR = Path(app.root_path) / "static" / "uploads" / "demo"
+LEAD_UPLOAD_DIR = Path(app.root_path) / "static" / "uploads" / "leads"
+LEAD_FILE_EXTENSIONS = {"jpg", "jpeg", "png", "webp", "pdf"}
 
 TODAY = date.today()
 ADDITIONAL_SALES_USER_NAMES = {"dr vishu bhasin", "dr vipul bhasin"}
@@ -362,6 +366,79 @@ def account_form(account_id=None):
     account_contacts = fetch_all("SELECT * FROM contacts WHERE account_id=%s AND is_archived=0 ORDER BY is_primary DESC,id", (account_id,)) if account_id else []
     account_files = fetch_all("SELECT id,original_name,stored_name,caption,uploaded_at FROM files WHERE account_id=%s AND is_archived=0 ORDER BY uploaded_at DESC", (account_id,)) if account_id else []
     return render_template("accounts/form.html", account=account, account_contacts=account_contacts, account_files=account_files)
+
+
+def normalized_phone(value):
+    compact = re.sub(r"[\s()-]", "", (value or "").strip())
+    if re.fullmatch(r"\d{10}", compact) or re.fullmatch(r"\+91\d{10}", compact):
+        return compact
+    return None
+
+
+@app.route("/leads/add", methods=["GET", "POST"])
+def lead_capture_form():
+    if request.method == "POST":
+        name = request.form.get("name", "").strip()
+        phone = normalized_phone(request.form.get("phone"))
+        alt_phone_raw = request.form.get("alt_phone", "").strip()
+        alt_phone = normalized_phone(alt_phone_raw) if alt_phone_raw else None
+        remarks = request.form.get("remarks", "").strip()
+        visit_window = request.form.get("visit_window", "Flexible")
+        patient_count = request.form.get("num_patients", "1")
+        allowed_tags = {"VIP", "High Value", "Previous Complaint", "Sr. Executive Call"}
+        tags = [tag for tag in request.form.getlist("tags") if tag in allowed_tags]
+        uploads = [item for item in request.files.getlist("prescriptions") if item and item.filename]
+
+        error = None
+        if not name or not phone or not remarks:
+            error = "Patient name, a valid phone number and remarks are required."
+        elif alt_phone_raw and not alt_phone:
+            error = "Enter a valid alternate phone number."
+        elif visit_window not in {"Today", "Tomorrow", "Flexible"}:
+            error = "Select a valid visit window."
+        elif patient_count not in {"1", "2", ">2"}:
+            error = "Select a valid patient count."
+        elif len(uploads) > 6:
+            error = "You can upload a maximum of 6 prescription files."
+        elif any("." not in item.filename or item.filename.rsplit(".", 1)[1].lower() not in LEAD_FILE_EXTENSIONS for item in uploads):
+            error = "Only JPG, PNG, WEBP and PDF prescription files are allowed."
+
+        if error:
+            flash(error, "danger")
+        else:
+            saved_paths = []
+            try:
+                with odt_connection() as conn:
+                    with conn.cursor() as cur:
+                        cur.execute("""INSERT INTO leads
+                            (lead_id,phone,wa_only,name,alt_phone,alt_wa_only,visit_window,
+                             prescription,remarks,tags,num_patients,created_by,status)
+                            VALUES (NULL,%s,%s,%s,%s,%s,%s,NULL,%s,%s,%s,%s,'Open')""",
+                            (phone, bool(request.form.get("wa_only")), name, alt_phone,
+                             bool(request.form.get("alt_wa_only")), visit_window, remarks,
+                             ",".join(tags), patient_count, session.get("user_name", "Unknown")))
+                        row_id = cur.lastrowid
+                        lead_id = f"LD-{row_id:03d}"
+                        stored_names = []
+                        LEAD_UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+                        for uploaded in uploads:
+                            original = secure_filename(uploaded.filename)
+                            stored = f"{lead_id}_{uuid4().hex[:8]}_{original}"
+                            destination = LEAD_UPLOAD_DIR / stored
+                            uploaded.save(destination)
+                            saved_paths.append(destination)
+                            stored_names.append(stored)
+                        cur.execute("UPDATE leads SET lead_id=%s,prescription=%s WHERE id=%s",
+                                    (lead_id, ",".join(stored_names) or None, row_id))
+                flash(f"Lead {lead_id} submitted successfully.", "success")
+                return redirect(url_for("lead_capture_form", created=lead_id))
+            except Exception:
+                for saved in saved_paths:
+                    saved.unlink(missing_ok=True)
+                app.logger.exception("Lead submission failed")
+                flash("Lead could not be submitted. Check the lead database connection and try again.", "danger")
+
+    return render_template("leads/form.html")
 
 
 @app.post("/accounts/<int:account_id>/contacts/<int:contact_id>/update")

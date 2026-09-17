@@ -8,7 +8,7 @@ services:
     volumes:
       - sales_db_data:/var/lib/mysql
     healthcheck:
-      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_intiialized"]
       interval: 10s
       timeout: 5s
       retries: 10
@@ -29,11 +29,17 @@ services:
       REFERRAL_DB_NAME: referral_sales
       REFERRAL_SECRET_KEY: ${REFERRAL_SECRET_KEY:?Set REFERRAL_SECRET_KEY in .env}
       WEB_WORKERS: ${WEB_WORKERS:-2}
+      ODT_MYSQL_HOST: ${ODT_MYSQL_HOST:-10.1.1.67}
+      ODT_MYSQL_PORT: ${ODT_MYSQL_PORT:-3306}
+      ODT_MYSQL_USER: ${ODT_MYSQL_USER:-root}
+      ODT_MYSQL_PASSWORD: ${ODT_MYSQL_PASSWORD:?Set ODT_MYSQL_PASSWORD in .env}
+      ODT_MYSQL_DB: ${ODT_MYSQL_DB:-lead_management}
     volumes:
       - ./certs:/app/certs:ro
       - sales_uploads:/app/static/uploads/demo
+      - lead_uploads:/app/static/uploads/leads
 
 volumes:
   sales_db_data:
   sales_uploads:
-
+  lead_uploads:

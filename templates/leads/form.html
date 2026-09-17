@@ -1,0 +1,64 @@
+{% extends 'base.html' %}
+{% block title %}Lead Capture Form{% endblock %}
+{% block content %}
+<div class="lead-capture-page">
+  <div class="page-head lead-page-head">
+    <div><div class="breadcrumb">Leads / Capture</div><h1>Lead Capture Form</h1><p class="text-muted mb-0">Create a patient lead in the lead-management database.</p></div>
+  </div>
+  <form method="post" enctype="multipart/form-data" class="lead-capture-form needs-validation" novalidate>
+    <section class="lead-id-card" aria-label="Lead ID information">
+      <span class="lead-id-icon"><i class="bi bi-hash"></i></span>
+      <div><strong>Lead ID (auto-generated)</strong><small>It will be assigned automatically after submission.</small></div>
+    </section>
+
+    <section class="card lead-form-card">
+      <div class="card-body">
+        <div class="lead-field lead-field-wide">
+          <label for="leadPatientName" class="form-label required">Patient name</label>
+          <input id="leadPatientName" name="name" class="form-control" autocomplete="name" placeholder="Enter patient name" value="{{request.form.get('name','')}}" required maxlength="255">
+          <div class="invalid-feedback">Patient name is required.</div>
+        </div>
+
+        <div class="lead-phone-grid">
+          <div class="lead-field">
+            <label for="leadPhone" class="form-label required">Patient phone</label>
+            <div class="lead-phone-row"><input id="leadPhone" name="phone" class="form-control" inputmode="tel" autocomplete="tel" placeholder="10 digits or +91…" value="{{request.form.get('phone','')}}" pattern="(?:[0-9]{10}|\+91[0-9]{10})" required><label class="wa-toggle"><input type="checkbox" name="wa_only" {% if request.form.get('wa_only') %}checked{% endif %}><i class="bi bi-whatsapp"></i><span>Only</span></label></div>
+            <div class="form-text">Enter 10 digits or a number starting with +91.</div>
+          </div>
+          <div class="lead-field">
+            <label for="leadAltPhone" class="form-label">Alternate number</label>
+            <div class="lead-phone-row"><input id="leadAltPhone" name="alt_phone" class="form-control" inputmode="tel" autocomplete="tel" placeholder="Optional" value="{{request.form.get('alt_phone','')}}" pattern="(?:[0-9]{10}|\+91[0-9]{10})"><label class="wa-toggle"><input type="checkbox" name="alt_wa_only" {% if request.form.get('alt_wa_only') %}checked{% endif %}><i class="bi bi-whatsapp"></i><span>Only</span></label></div>
+          </div>
+          <button type="button" class="btn btn-sm btn-light lead-swap-numbers"><i class="bi bi-arrow-repeat"></i> Swap numbers</button>
+        </div>
+
+        <fieldset class="lead-field"><legend>Preferred visit window</legend><div class="lead-choice-row">
+          {% for value,icon in [('Today','bi-calendar-check'),('Tomorrow','bi-calendar-plus'),('Flexible','bi-clock')] %}<label class="choice-pill"><input type="radio" name="visit_window" value="{{value}}" {% if request.form.get('visit_window','Flexible')==value %}checked{% endif %}><span><i class="bi {{icon}}"></i>{{value}}</span></label>{% endfor %}
+        </div></fieldset>
+
+        <div class="lead-field">
+          <label for="leadPrescription" class="form-label">Prescription / photos <span class="label-note">Maximum 6</span></label>
+          <label class="lead-file-picker" for="leadPrescription"><i class="bi bi-cloud-arrow-up"></i><span><strong>Choose files</strong><small>JPG, PNG, WEBP or PDF</small></span></label>
+          <input id="leadPrescription" name="prescriptions" type="file" accept="image/jpeg,image/png,image/webp,application/pdf" multiple hidden>
+          <div class="lead-file-list" aria-live="polite">No files selected</div>
+        </div>
+
+        <div class="lead-field">
+          <label for="leadRemarks" class="form-label required">Remarks</label>
+          <textarea id="leadRemarks" name="remarks" class="form-control" rows="4" placeholder="Enter remarks…" required>{{request.form.get('remarks','')}}</textarea>
+          <div class="invalid-feedback">Remarks are required.</div>
+        </div>
+
+        <fieldset class="lead-field"><legend>Patient tags</legend><div class="lead-choice-row lead-tags">
+          {% for tag in ['VIP','High Value','Previous Complaint','Sr. Executive Call'] %}<label class="choice-pill"><input type="checkbox" name="tags" value="{{tag}}" {% if tag in request.form.getlist('tags') %}checked{% endif %}><span>{{tag}}</span></label>{% endfor %}
+        </div></fieldset>
+
+        <fieldset class="lead-field"><legend>No. of patients</legend><div class="lead-choice-row">
+          {% for count in ['1','2','>2'] %}<label class="choice-pill choice-round"><input type="radio" name="num_patients" value="{{count}}" {% if request.form.get('num_patients','1')==count %}checked{% endif %}><span>{{count}}</span></label>{% endfor %}
+        </div></fieldset>
+      </div>
+    </section>
+    <button class="btn btn-primary lead-submit" type="submit"><i class="bi bi-send"></i><span>Submit lead</span></button>
+  </form>
+</div>
+{% endblock %}

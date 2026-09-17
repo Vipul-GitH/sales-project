@@ -351,6 +351,19 @@
     flex: 1;
   }
 
+  .lead-capture-page { width: 100%; }
+  .lead-page-head h1 { font-size: 1.35rem; }
+  .lead-id-card { padding: 13px; align-items: flex-start; }
+  .lead-form-card .card-body { padding: 15px; gap: 18px; }
+  .lead-phone-grid { grid-template-columns: 1fr; gap: 18px; }
+  .lead-phone-row { align-items: stretch; }
+  .wa-toggle { padding-inline: 5px; }
+  .choice-pill span { min-height: 42px; }
+  .lead-tags { display: grid; grid-template-columns: 1fr 1fr; }
+  .lead-tags .choice-pill span { justify-content: center; width: 100%; height: 100%; text-align: center; }
+  .lead-file-picker { min-height: 78px; }
+  .lead-submit { position: sticky; bottom: max(10px, env(safe-area-inset-bottom)); z-index: 3; }
+
   .mode-tabs,
   .detail-tabs,
   .active-chips {

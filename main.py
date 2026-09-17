@@ -26,6 +26,19 @@ KEY_FILE = PROJECT_ROOT / "certs" / "privkey.pem"
 PUBLIC_HOST = os.getenv("REFERRAL_PUBLIC_HOST", "127.0.0.1")
 
 
+def load_local_env() -> None:
+    """Load ignored local secrets for `python main.py`; real environment wins."""
+    env_file = PROJECT_ROOT / ".env"
+    if not env_file.is_file():
+        return
+    for raw_line in env_file.read_text(encoding="utf-8").splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, value = line.split("=", 1)
+        os.environ.setdefault(key.strip(), value.strip().strip('"').strip("'"))
+
+
 def port_is_open(host: str, port: int) -> bool:
     try:
         with socket.create_connection((host, port), timeout=0.5):
@@ -82,6 +95,7 @@ def start_mysql() -> None:
 
 def main() -> None:
     os.chdir(PROJECT_ROOT)
+    load_local_env()
     use_project_virtualenv()
     start_mysql()
 
