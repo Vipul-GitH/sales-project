@@ -56,6 +56,21 @@ def sales_suggestion_users(users=None):
 app.jinja_env.globals["login_suggestion_users"] = lambda: sales_suggestion_users(request_users())
 
 
+def friendly_datetime(value):
+    """Present database timestamps consistently in a human-readable local format."""
+    if not value:
+        return "—"
+    if isinstance(value, str):
+        try:
+            value = datetime.fromisoformat(value)
+        except ValueError:
+            return value
+    return value.strftime("%d %b %Y, %I:%M %p").replace(", 0", ", ")
+
+
+app.jinja_env.filters["friendly_datetime"] = friendly_datetime
+
+
 def task_snapshot(task_id):
     return fetch_one("""SELECT t.title, COALESCE(a.entity_name,'Internal task') AS account,
         t.task_type, t.details, assigner.name AS assigned_by, assignee.name AS assigned_to,
@@ -236,6 +251,9 @@ def authorize_record_access():
     account_endpoints = {"account_detail", "account_form", "update_contact", "archive_contact", "archive_file"}
     if endpoint in account_endpoints and request.view_args and request.view_args.get("account_id") and not owns_account(request.view_args["account_id"]):
         return deny_access()
+    if endpoint == "account_activity_history" and request.view_args and request.view_args.get("account_id"):
+        if not can_work_on_account(request.view_args["account_id"]):
+            return deny_access()
     task_endpoints = {"task_detail", "task_form", "complete_task", "cancel_task", "record_scheduled_activity"}
     task_id = (request.view_args or {}).get("task_id")
     if endpoint in task_endpoints and task_id and not manages_task(task_id):
@@ -345,6 +363,30 @@ def account_detail(account_id):
     files = fetch_all("SELECT id,original_name,stored_name,caption,uploaded_at FROM files WHERE account_id=%s AND is_archived=0 ORDER BY uploaded_at DESC", (account_id,))
     ownership = fetch_all("""SELECT p.name previous_owner,n.name new_owner,c.name changed_by,h.reason,h.changed_at FROM ownership_history h JOIN users p ON p.id=h.previous_owner_id JOIN users n ON n.id=h.new_owner_id JOIN users c ON c.id=h.changed_by_id WHERE h.account_id=%s ORDER BY h.changed_at DESC""", (account_id,))
     return render_template("accounts/detail.html", account=account, contacts=contacts, activities=activities, tasks_for_account=tasks_for_account, files=files, ownership=ownership)
+
+
+@app.route("/accounts/<int:account_id>/activity-history")
+def account_activity_history(account_id):
+    account = fetch_one("""SELECT a.id,a.entity_name,a.area,a.lifecycle_status,u.name AS owner
+        FROM accounts a JOIN users u ON u.id=a.owner_id WHERE a.id=%s""", (account_id,))
+    if not account:
+        flash("Account not found.", "danger")
+        return redirect(url_for("account_list"))
+    recorded_activities = fetch_all("""SELECT ac.id,ac.activity_type,ac.interaction_at,ac.entered_at,
+        ac.notes,ac.next_action,u.name AS entered_by
+        FROM activities ac JOIN users u ON u.id=ac.entered_by_id
+        WHERE ac.account_id=%s AND ac.is_archived=0
+        ORDER BY ac.interaction_at DESC,ac.id DESC""", (account_id,))
+    scheduled_activities = fetch_all("""SELECT t.id,t.title,t.task_type,t.details,t.due_at,t.status,
+        t.priority,t.completed_at,t.completion_notes,t.cancelled_reason,
+        assignee.name AS assigned_to,assigner.name AS assigned_by
+        FROM tasks t JOIN users assignee ON assignee.id=t.assigned_to_id
+        JOIN users assigner ON assigner.id=t.assigned_by_id
+        WHERE t.account_id=%s AND t.task_type LIKE 'Scheduled %%'
+        ORDER BY COALESCE(t.completed_at,t.due_at) DESC,t.id DESC""", (account_id,))
+    return render_template("accounts/activity_history.html", account=account,
+                           recorded_activities=recorded_activities,
+                           scheduled_activities=scheduled_activities)
 
 
 @app.route("/accounts/add", methods=["GET","POST"])
@@ -809,8 +851,10 @@ def cancel_task(task_id):
 
 @app.route("/reports/<report>")
 def reports(report="tasks"):
+    if report not in {"tasks", "activities", "leads", "no-activity"}:
+        return redirect(url_for("reports", report="tasks"))
     filters = selected_filters()
-    if not filters["from_date"] and not filters["to_date"]:
+    if report != "no-activity" and not filters["from_date"] and not filters["to_date"]:
         today_value = date.today().isoformat()
         filters["from_date"] = today_value
         filters["to_date"] = today_value
@@ -837,6 +881,7 @@ def reports(report="tasks"):
         return conditions, values
 
     rows = []
+    account_search_options = []
     user_id = session["user_id"]
     if report == "tasks":
         conditions, params = date_conditions("t.due_at")
@@ -851,20 +896,13 @@ def reports(report="tasks"):
             conditions.append("(ac.entered_by_id=%s OR a.owner_id=%s OR EXISTS (SELECT 1 FROM tasks t WHERE t.account_id=a.id AND (t.assigned_by_id=%s OR t.assigned_to_id=%s)))")
             params.extend([user_id, user_id, user_id, user_id])
         where = "WHERE " + " AND ".join(conditions)
-        rows = fetch_all(f"""SELECT ac.activity_type item,a.entity_name account,a.area,
+        rows = fetch_all(f"""SELECT ac.activity_type item,a.id account_id,a.entity_name account,a.area,
             account_owner.name account_owner,u.name owner,'Recorded' status,
             ac.notes,ac.next_action,ac.interaction_at relevant_date,ac.entered_at
             FROM activities ac JOIN accounts a ON a.id=ac.account_id
             JOIN users u ON u.id=ac.entered_by_id
             JOIN users account_owner ON account_owner.id=a.owner_id
             {where} ORDER BY ac.interaction_at DESC""", tuple(params))
-    elif report == "visits":
-        conditions, params = date_conditions("t.due_at")
-        conditions.insert(0, "t.task_type LIKE '%%Visit%%'")
-        if not has_management_scope():
-            conditions.append("(t.assigned_by_id=%s OR t.assigned_to_id=%s)"); params.extend([user_id, user_id])
-        where = "WHERE " + " AND ".join(conditions)
-        rows = fetch_all(f"""SELECT t.title item,COALESCE(a.entity_name,'Internal task') account,u.name owner,t.status,t.due_at relevant_date FROM tasks t LEFT JOIN accounts a ON a.id=t.account_id JOIN users u ON u.id=t.assigned_to_id {where} ORDER BY t.due_at""", tuple(params))
     elif report == "no-activity":
         where, params = "", []
         if not has_management_scope():
@@ -873,7 +911,14 @@ def reports(report="tasks"):
         date_having, date_params = date_conditions("COALESCE(MAX(ac.interaction_at),MAX(a.created_at))")
         having = ["(MAX(ac.interaction_at) IS NULL OR MAX(ac.interaction_at) < DATE_SUB(CURDATE(), INTERVAL 30 DAY))", *date_having]
         params.extend(date_params)
-        rows = fetch_all(f"""SELECT a.entity_name item,a.entity_name account,u.name owner,'No activity in 30 days' status,COALESCE(MAX(ac.interaction_at),MAX(a.created_at)) relevant_date FROM accounts a JOIN users u ON u.id=a.owner_id LEFT JOIN activities ac ON ac.account_id=a.id AND ac.is_archived=0 {where} GROUP BY a.id,u.name HAVING {' AND '.join(having)} ORDER BY relevant_date""", tuple(params))
+        rows = fetch_all(f"""SELECT a.id account_id,a.entity_name item,a.entity_name account,u.name owner,
+            'No activity in 30 days' status,MAX(ac.interaction_at) last_activity,
+            COALESCE(MAX(ac.interaction_at),MAX(a.created_at)) relevant_date,
+            CASE WHEN MAX(ac.interaction_at) IS NULL THEN NULL
+                 ELSE DATEDIFF(CURDATE(),DATE(MAX(ac.interaction_at))) END days_since_activity
+            FROM accounts a JOIN users u ON u.id=a.owner_id
+            LEFT JOIN activities ac ON ac.account_id=a.id AND ac.is_archived=0 {where}
+            GROUP BY a.id,u.name HAVING {' AND '.join(having)} ORDER BY relevant_date""", tuple(params))
     else:
         conditions, params = date_conditions("COALESCE(a.next_follow_up_date,a.updated_at)")
         if not has_management_scope():
@@ -881,8 +926,14 @@ def reports(report="tasks"):
             params[0:0] = [user_id, user_id, user_id]
         where = "WHERE " + " AND ".join(conditions) if conditions else ""
         rows = fetch_all(f"""SELECT a.entity_name item,a.entity_name account,u.name owner,a.lifecycle_status status,COALESCE(a.next_follow_up_date,a.updated_at) relevant_date FROM accounts a JOIN users u ON u.id=a.owner_id {where} ORDER BY relevant_date DESC""", tuple(params))
+    if report == "no-activity":
+        account_search_options = sorted({r["account"] for r in rows}, key=str.lower)
     query = filters["q"].lower()
-    if query: rows = [r for r in rows if query in " ".join(str(v or "") for v in r.values()).lower()]
+    if query:
+        if report == "no-activity":
+            rows = [r for r in rows if query in str(r.get("account") or "").lower()]
+        else:
+            rows = [r for r in rows if query in " ".join(str(v or "") for v in r.values()).lower()]
     if filters["owner"]: rows = [r for r in rows if r["owner"] == filters["owner"]]
     if filters["status"]: rows = [r for r in rows if r["status"] == filters["status"]]
     if invalid_date:
@@ -905,11 +956,12 @@ def reports(report="tasks"):
             fieldnames = ["activity_date", "account", "area", "activity_type", "entered_by",
                           "account_owner", "notes", "next_action", "entry_time"]
         else:
-            export_rows = rows
             fieldnames = ["item", "account", "owner", "status", "relevant_date"]
+            export_rows = [{key: row.get(key) for key in fieldnames} for row in rows]
         out = StringIO(); writer = csv.DictWriter(out, fieldnames=fieldnames); writer.writeheader(); writer.writerows(export_rows)
         return Response(out.getvalue(), mimetype="text/csv", headers={"Content-Disposition": f"attachment; filename={report}-report.csv"})
-    return render_template("reports/index.html", report=report, report_rows=rows, filters=filters)
+    return render_template("reports/index.html", report=report, report_rows=rows, filters=filters,
+                           account_search_options=account_search_options)
 
 if __name__ == "__main__":
     # Deliberately keep the prototype server simple and reloader-free for Windows use.

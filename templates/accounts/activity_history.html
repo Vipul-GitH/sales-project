@@ -1,0 +1,64 @@
+{% extends 'base.html' %}
+{% from 'components/macros.html' import status %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <div class="breadcrumb"><a href="{{url_for('reports', report='activities')}}">Activities report</a> / {{account.entity_name}}</div>
+    <h1>{{account.entity_name}} activity history</h1>
+    <p class="text-muted mb-0">{{account.area or 'Area not set'}} · Owner: {{account.owner}} · All recorded and scheduled activities</p>
+  </div>
+  <a class="btn btn-outline-primary" href="{{url_for('account_detail', account_id=account.id)}}">View account</a>
+</div>
+
+<div class="activity-history-summary mb-3">
+  <div><span>Recorded activities</span><strong>{{recorded_activities|length}}</strong></div>
+  <div><span>Pending scheduled</span><strong>{{scheduled_activities|selectattr('status','equalto','Pending')|list|length}}</strong></div>
+  <div><span>Completed scheduled</span><strong>{{scheduled_activities|selectattr('status','equalto','Completed')|list|length}}</strong></div>
+  <div><span>Cancelled scheduled</span><strong>{{scheduled_activities|selectattr('status','equalto','Cancelled')|list|length}}</strong></div>
+</div>
+
+<div class="card mb-3">
+  <div class="card-header"><h5>Recorded activities</h5></div>
+  <div class="account-activity-list">
+    {% for activity in recorded_activities %}
+    <article class="account-activity-item">
+      <div class="activity-history-head">
+        <div><b>{{activity.activity_type}}</b><small>Completed {{activity.interaction_at|friendly_datetime}}</small></div>
+        {{status('Completed')}}
+      </div>
+      <p>{{activity.notes or 'No notes recorded.'}}</p>
+      <div class="activity-history-meta">
+        <span><b>Entered by:</b> {{activity.entered_by}}</span>
+        <span><b>Entry time:</b> {{activity.entered_at|friendly_datetime}}</span>
+        <span><b>Next action:</b> {{activity.next_action or 'Not specified'}}</span>
+      </div>
+      <a class="btn btn-sm btn-outline-primary" href="{{url_for('activity_detail', activity_id=activity.id)}}">View activity audit</a>
+    </article>
+    {% else %}<div class="card-body text-muted">No recorded activities for this account.</div>{% endfor %}
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-header"><h5>Scheduled activities — all statuses</h5></div>
+  <div class="account-activity-list">
+    {% for activity in scheduled_activities %}
+    <article class="account-activity-item">
+      <div class="activity-history-head">
+        <div><b>{{activity.title}}</b><small>{{activity.task_type|replace('Scheduled ','')}} · Due {{activity.due_at|friendly_datetime}}</small></div>
+        {{status(activity.status)}}
+      </div>
+      <p>{{activity.details or 'No details recorded.'}}</p>
+      <div class="activity-history-meta">
+        <span><b>Assigned to:</b> {{activity.assigned_to}}</span>
+        <span><b>Assigned by:</b> {{activity.assigned_by}}</span>
+        <span><b>Priority:</b> {{activity.priority}}</span>
+        {% if activity.completed_at %}<span><b>Completed:</b> {{activity.completed_at|friendly_datetime}}</span>{% endif %}
+        {% if activity.completion_notes %}<span><b>Completion notes:</b> {{activity.completion_notes}}</span>{% endif %}
+        {% if activity.cancelled_reason %}<span><b>Cancellation reason:</b> {{activity.cancelled_reason}}</span>{% endif %}
+      </div>
+      <a class="btn btn-sm btn-outline-primary" href="{{url_for('task_detail', task_id=activity.id)}}">View task details</a>
+    </article>
+    {% else %}<div class="card-body text-muted">No scheduled activities for this account.</div>{% endfor %}
+  </div>
+</div>
+{% endblock %}
