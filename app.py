@@ -5,7 +5,7 @@ import os
 import re
 from pathlib import Path
 from uuid import uuid4
-from flask import Flask, Response, flash, redirect, render_template, request, session, url_for
+from flask import Flask, Response, flash, g, redirect, render_template, request, session, url_for
 import csv
 from io import StringIO
 from werkzeug.utils import secure_filename
@@ -32,6 +32,13 @@ def database_users():
         return []
 
 
+def request_users():
+    """Load users at most once during a request."""
+    if "database_users" not in g:
+        g.database_users = database_users()
+    return g.database_users
+
+
 def sales_suggestion_users(users=None):
     """Active Marketing users plus the two explicitly approved administrators."""
     users = users if users is not None else database_users()
@@ -42,6 +49,11 @@ def sales_suggestion_users(users=None):
             or user["name"].strip().lower() in ADDITIONAL_SALES_USER_NAMES
         )
     ]
+
+
+# Shared filter macros are imported outside the request template context.
+# Use the exact same eligible-user rule as the login suggestions.
+app.jinja_env.globals["login_suggestion_users"] = lambda: sales_suggestion_users(request_users())
 
 
 def task_snapshot(task_id):
@@ -97,14 +109,19 @@ def prepare_audit_rows(rows):
     return prepared
 
 
-def database_accounts():
+def database_accounts(access_user_id=None):
     try:
-        rows = fetch_all("""SELECT a.id, a.entity_name, a.account_type, a.entity_category, a.area,
+        access_clause = "" if access_user_id is None else """WHERE (a.owner_id=%s OR EXISTS (
+            SELECT 1 FROM tasks access_task WHERE access_task.account_id=a.id
+            AND (access_task.assigned_by_id=%s OR access_task.assigned_to_id=%s)))"""
+        params = () if access_user_id is None else (access_user_id, access_user_id, access_user_id)
+        rows = fetch_all(f"""SELECT a.id, a.entity_name, a.account_type, a.entity_category, a.area,
             u.name AS owner, a.lead_temperature, a.lifecycle_status, a.next_follow_up_date,
             MAX(ac.interaction_at) AS last_activity
             FROM accounts a JOIN users u ON u.id=a.owner_id
             LEFT JOIN activities ac ON ac.account_id=a.id
-            GROUP BY a.id, u.name ORDER BY a.id""")
+            {access_clause}
+            GROUP BY a.id, u.name ORDER BY a.id""", params)
         return [{"id": r["id"], "name": r["entity_name"], "type": r["account_type"], "category": r["entity_category"],
                  "area": r["area"], "owner": r["owner"], "temp": r["lead_temperature"] or "", "status": r["lifecycle_status"],
                  "followup": r["next_follow_up_date"].strftime("%d %b") if r["next_follow_up_date"] else "—",
@@ -249,12 +266,22 @@ def save_attachments(account_id=None, activity_id=None, task_id=None):
 
 @app.context_processor
 def inject_globals():
-    users = database_users()
-    suggestion_users = sales_suggestion_users(users)
-    accounts = database_accounts()
-    if "user_id" in session and not has_management_scope():
-        accounts = [account for account in accounts if can_work_on_account(account["id"])]
-    return dict(role=role(), users=suggestion_users, marketing_users=suggestion_users, suggestion_users=suggestion_users, all_users=users, accounts=accounts, tasks=database_tasks(), today=TODAY.strftime("%d %b %Y"), today_iso=date.today().isoformat(), nav_role_url=nav_role_url)
+    endpoint = request.endpoint or ""
+    user_endpoints = {
+        "account_list", "account_form", "activities", "activity_form", "schedule_activity",
+        "my_tasks", "team_tasks", "assigned_by_me_tasks", "assigned_to_tl_tasks", "task_form", "reports",
+    }
+    account_endpoints = {"activity_form", "schedule_activity", "task_form"}
+    users = request_users() if endpoint in user_endpoints else []
+    suggestion_users = sales_suggestion_users(users) if users else []
+    accounts = []
+    if endpoint in account_endpoints:
+        access_user_id = None if has_management_scope() else session.get("user_id")
+        accounts = database_accounts(access_user_id)
+    return dict(role=role(), users=suggestion_users, marketing_users=suggestion_users,
+                suggestion_users=suggestion_users, all_users=users, accounts=accounts,
+                tasks=[], today=TODAY.strftime("%d %b %Y"), today_iso=date.today().isoformat(),
+                nav_role_url=nav_role_url)
 
 @app.route("/")
 def index(): return redirect(url_for("dashboard", role="Executive"))
@@ -270,7 +297,7 @@ def login():
             session.update(user_id=user["id"], user_name=user["name"], role=user["role"])
             return redirect(url_for("dashboard"))
         flash("Invalid user ID or password.", "danger")
-    return render_template("auth/login.html", standalone=True, login_users=sales_suggestion_users())
+    return render_template("auth/login.html", standalone=True, login_users=sales_suggestion_users(request_users()))
 
 @app.route("/forgot-password", methods=["GET","POST"])
 def forgot_password():
@@ -289,7 +316,7 @@ def dashboard():
     accounts_for_user = [a for a in database_accounts() if has_management_scope() or a["owner"] == session.get("user_name")]
     overdue = sum(1 for t in open_tasks if t["overdue"])
     visits_today = sum(1 for t in open_tasks if "Visit" in t["type"] and t["due"].startswith(TODAY.strftime("%d %b")))
-    metrics = [(len(open_tasks), "Open tasks", "teal"), (overdue, "Overdue", "red"), (visits_today, "Today's visits", "mint"), (sum(1 for a in accounts_for_user if a["temp"] == "Hot"), "Hot leads", "amber"), (len(accounts_for_user), "Accounts", "blue"), (sum(1 for u in database_users() if u["active"]), "Active users", "grey")]
+    metrics = [(len(open_tasks), "Open tasks", "teal"), (overdue, "Overdue", "red"), (visits_today, "Today's visits", "mint"), (sum(1 for a in accounts_for_user if a["temp"] == "Hot"), "Hot leads", "amber"), (len(accounts_for_user), "Accounts", "blue")]
     return render_template("dashboard/index.html", open_tasks=open_tasks, hot_accounts=[a for a in accounts_for_user if a["temp"] == "Hot"], metrics=metrics)
 
 @app.route("/accounts")
@@ -319,11 +346,13 @@ def account_detail(account_id):
     ownership = fetch_all("""SELECT p.name previous_owner,n.name new_owner,c.name changed_by,h.reason,h.changed_at FROM ownership_history h JOIN users p ON p.id=h.previous_owner_id JOIN users n ON n.id=h.new_owner_id JOIN users c ON c.id=h.changed_by_id WHERE h.account_id=%s ORDER BY h.changed_at DESC""", (account_id,))
     return render_template("accounts/detail.html", account=account, contacts=contacts, activities=activities, tasks_for_account=tasks_for_account, files=files, ownership=ownership)
 
+
 @app.route("/accounts/add", methods=["GET","POST"])
 @app.route("/accounts/<int:account_id>/edit", methods=["GET","POST"])
 def account_form(account_id=None):
     if request.method == "POST":
         entity_name = request.form.get("entity_name", "").strip()
+        area = request.form.get("area", "").strip()
         account_type = request.form.get("account_type", "").strip()
         allowed_account_types = {"New Lead", "Existing Client"}
         lifecycle_status = request.form.get("lifecycle_status", "Active").strip()
@@ -332,14 +361,22 @@ def account_form(account_id=None):
         owner_id = request.form.get("owner_id") or session.get("user_id")
         if not has_management_scope():
             owner_id = session["user_id"]
-        if not entity_name or not owner_id or account_type not in allowed_account_types:
-            flash("Account name, type and owner are required.", "danger")
+        duplicate = fetch_one("""SELECT id,entity_name FROM accounts
+            WHERE LOWER(TRIM(entity_name))=LOWER(TRIM(%s))
+              AND (%s IS NULL OR id<>%s)
+            LIMIT 1""", (entity_name, account_id, account_id)) if entity_name else None
+        if not entity_name or not area or not owner_id or account_type not in allowed_account_types:
+            flash("Account name, area, type and owner are required.", "danger")
+        elif duplicate:
+            flash(f"An account named {duplicate['entity_name']} already exists. Duplicate account was not created.", "danger")
+            if not account_id:
+                return redirect(url_for("account_detail", account_id=duplicate["id"]))
         elif lifecycle_status not in allowed_lifecycle_statuses:
             flash("Select a valid account status.", "danger")
         elif account_id and lifecycle_status != "Active" and not status_reason:
             flash("A reason is required when the account is not Active.", "danger")
         else:
-            values = (account_type, entity_name, request.form.get("entity_category"), request.form.get("area"), request.form.get("lead_source"), owner_id, request.form.get("lead_temperature") if account_type == "New Lead" else None, request.form.get("next_follow_up_date") or None, request.form.get("notes"))
+            values = (account_type, entity_name, request.form.get("entity_category"), area, request.form.get("lead_source"), owner_id, request.form.get("lead_temperature") if account_type == "New Lead" else None, request.form.get("next_follow_up_date") or None, request.form.get("notes"))
             if account_id:
                 previous = fetch_one("SELECT owner_id FROM accounts WHERE id=%s", (account_id,))
                 execute("UPDATE accounts SET account_type=%s,entity_name=%s,entity_category=%s,area=%s,lead_source=%s,owner_id=%s,lead_temperature=%s,next_follow_up_date=%s,notes=%s,lifecycle_status=%s,status_reason=%s WHERE id=%s", values + (lifecycle_status, None if lifecycle_status == "Active" else status_reason, account_id))
@@ -375,7 +412,8 @@ def normalized_phone(value):
     return None
 
 
-@app.route("/leads/add", methods=["GET", "POST"])
+# Lead capture is intentionally kept disabled for now.
+# @app.route("/leads/add", methods=["GET", "POST"])
 def lead_capture_form():
     if request.method == "POST":
         name = request.form.get("name", "").strip()
@@ -772,43 +810,104 @@ def cancel_task(task_id):
 @app.route("/reports/<report>")
 def reports(report="tasks"):
     filters = selected_filters()
-    rows = []
-    user_id = session["user_id"]
-    if report == "tasks":
-        scope, params = ("", ()) if has_management_scope() else ("WHERE t.assigned_by_id=%s OR t.assigned_to_id=%s", (user_id, user_id))
-        rows = fetch_all(f"""SELECT t.title item, COALESCE(a.entity_name,'Internal task') account, u.name owner, t.status, t.due_at relevant_date FROM tasks t LEFT JOIN accounts a ON a.id=t.account_id JOIN users u ON u.id=t.assigned_to_id {scope} ORDER BY t.due_at""", params)
-    elif report == "activities":
-        scope, params = ("", ()) if has_management_scope() else ("""AND (ac.entered_by_id=%s OR a.owner_id=%s OR EXISTS (SELECT 1 FROM tasks t WHERE t.account_id=a.id AND (t.assigned_by_id=%s OR t.assigned_to_id=%s)))""", (user_id, user_id, user_id, user_id))
-        rows = fetch_all(f"""SELECT ac.activity_type item,a.entity_name account,u.name owner,'Recorded' status,ac.interaction_at relevant_date FROM activities ac JOIN accounts a ON a.id=ac.account_id JOIN users u ON u.id=ac.entered_by_id WHERE ac.is_archived=0 {scope} ORDER BY ac.interaction_at DESC""", params)
-    elif report == "visits":
-        scope, params = ("", ()) if has_management_scope() else ("AND (t.assigned_by_id=%s OR t.assigned_to_id=%s)", (user_id, user_id))
-        rows = fetch_all(f"""SELECT t.title item,COALESCE(a.entity_name,'Internal task') account,u.name owner,t.status,t.due_at relevant_date FROM tasks t LEFT JOIN accounts a ON a.id=t.account_id JOIN users u ON u.id=t.assigned_to_id WHERE t.task_type LIKE '%%Visit%%' {scope} ORDER BY t.due_at""", params)
-    elif report == "no-activity":
-        scope, params = ("", ()) if has_management_scope() else ("WHERE a.owner_id=%s OR EXISTS (SELECT 1 FROM tasks t WHERE t.account_id=a.id AND (t.assigned_by_id=%s OR t.assigned_to_id=%s))", (user_id, user_id, user_id))
-        rows = fetch_all(f"""SELECT a.entity_name item,a.entity_name account,u.name owner,'No activity in 30 days' status,COALESCE(MAX(ac.interaction_at),a.created_at) relevant_date FROM accounts a JOIN users u ON u.id=a.owner_id LEFT JOIN activities ac ON ac.account_id=a.id AND ac.is_archived=0 {scope} GROUP BY a.id,u.name HAVING MAX(ac.interaction_at) IS NULL OR MAX(ac.interaction_at) < DATE_SUB(CURDATE(), INTERVAL 30 DAY) ORDER BY relevant_date""", params)
-    else:
-        scope, params = ("", ()) if has_management_scope() else ("WHERE a.owner_id=%s OR EXISTS (SELECT 1 FROM tasks t WHERE t.account_id=a.id AND (t.assigned_by_id=%s OR t.assigned_to_id=%s))", (user_id, user_id, user_id))
-        rows = fetch_all(f"""SELECT a.entity_name item,a.entity_name account,u.name owner,a.lifecycle_status status,COALESCE(a.next_follow_up_date,a.updated_at) relevant_date FROM accounts a JOIN users u ON u.id=a.owner_id {scope} ORDER BY relevant_date DESC""", params)
-    query = filters["q"].lower()
-    if query: rows = [r for r in rows if query in " ".join(str(v or "") for v in r.values()).lower()]
-    if filters["owner"]: rows = [r for r in rows if r["owner"] == filters["owner"]]
-    if filters["status"]: rows = [r for r in rows if r["status"] == filters["status"]]
+    if not filters["from_date"] and not filters["to_date"]:
+        today_value = date.today().isoformat()
+        filters["from_date"] = today_value
+        filters["to_date"] = today_value
     from_date = parse_filter_date(filters["from_date"])
     to_date = parse_filter_date(filters["to_date"])
     invalid_date = ((filters["from_date"] and from_date is None) or
                     (filters["to_date"] and to_date is None))
+    reversed_range = bool(from_date and to_date and from_date > to_date)
     if invalid_date:
         flash("Enter valid report dates.", "danger")
-        rows = []
-    elif from_date and to_date and from_date > to_date:
+    elif reversed_range:
         flash("From date cannot be after To date.", "danger")
+
+    def date_conditions(column):
+        if invalid_date or reversed_range:
+            return ["1=0"], []
+        conditions, values = [], []
+        if from_date:
+            conditions.append(f"{column}>=%s")
+            values.append(from_date)
+        if to_date:
+            conditions.append(f"{column}<%s")
+            values.append(to_date + timedelta(days=1))
+        return conditions, values
+
+    rows = []
+    user_id = session["user_id"]
+    if report == "tasks":
+        conditions, params = date_conditions("t.due_at")
+        if not has_management_scope():
+            conditions.insert(0, "(t.assigned_by_id=%s OR t.assigned_to_id=%s)"); params[0:0] = [user_id, user_id]
+        where = "WHERE " + " AND ".join(conditions) if conditions else ""
+        rows = fetch_all(f"""SELECT t.title item, COALESCE(a.entity_name,'Internal task') account, u.name owner, t.status, t.due_at relevant_date FROM tasks t LEFT JOIN accounts a ON a.id=t.account_id JOIN users u ON u.id=t.assigned_to_id {where} ORDER BY t.due_at""", tuple(params))
+    elif report == "activities":
+        conditions, params = date_conditions("ac.interaction_at")
+        conditions.insert(0, "ac.is_archived=0")
+        if not has_management_scope():
+            conditions.append("(ac.entered_by_id=%s OR a.owner_id=%s OR EXISTS (SELECT 1 FROM tasks t WHERE t.account_id=a.id AND (t.assigned_by_id=%s OR t.assigned_to_id=%s)))")
+            params.extend([user_id, user_id, user_id, user_id])
+        where = "WHERE " + " AND ".join(conditions)
+        rows = fetch_all(f"""SELECT ac.activity_type item,a.entity_name account,a.area,
+            account_owner.name account_owner,u.name owner,'Recorded' status,
+            ac.notes,ac.next_action,ac.interaction_at relevant_date,ac.entered_at
+            FROM activities ac JOIN accounts a ON a.id=ac.account_id
+            JOIN users u ON u.id=ac.entered_by_id
+            JOIN users account_owner ON account_owner.id=a.owner_id
+            {where} ORDER BY ac.interaction_at DESC""", tuple(params))
+    elif report == "visits":
+        conditions, params = date_conditions("t.due_at")
+        conditions.insert(0, "t.task_type LIKE '%%Visit%%'")
+        if not has_management_scope():
+            conditions.append("(t.assigned_by_id=%s OR t.assigned_to_id=%s)"); params.extend([user_id, user_id])
+        where = "WHERE " + " AND ".join(conditions)
+        rows = fetch_all(f"""SELECT t.title item,COALESCE(a.entity_name,'Internal task') account,u.name owner,t.status,t.due_at relevant_date FROM tasks t LEFT JOIN accounts a ON a.id=t.account_id JOIN users u ON u.id=t.assigned_to_id {where} ORDER BY t.due_at""", tuple(params))
+    elif report == "no-activity":
+        where, params = "", []
+        if not has_management_scope():
+            where = "WHERE (a.owner_id=%s OR EXISTS (SELECT 1 FROM tasks t WHERE t.account_id=a.id AND (t.assigned_by_id=%s OR t.assigned_to_id=%s)))"
+            params.extend([user_id, user_id, user_id])
+        date_having, date_params = date_conditions("COALESCE(MAX(ac.interaction_at),MAX(a.created_at))")
+        having = ["(MAX(ac.interaction_at) IS NULL OR MAX(ac.interaction_at) < DATE_SUB(CURDATE(), INTERVAL 30 DAY))", *date_having]
+        params.extend(date_params)
+        rows = fetch_all(f"""SELECT a.entity_name item,a.entity_name account,u.name owner,'No activity in 30 days' status,COALESCE(MAX(ac.interaction_at),MAX(a.created_at)) relevant_date FROM accounts a JOIN users u ON u.id=a.owner_id LEFT JOIN activities ac ON ac.account_id=a.id AND ac.is_archived=0 {where} GROUP BY a.id,u.name HAVING {' AND '.join(having)} ORDER BY relevant_date""", tuple(params))
+    else:
+        conditions, params = date_conditions("COALESCE(a.next_follow_up_date,a.updated_at)")
+        if not has_management_scope():
+            conditions.insert(0, "(a.owner_id=%s OR EXISTS (SELECT 1 FROM tasks t WHERE t.account_id=a.id AND (t.assigned_by_id=%s OR t.assigned_to_id=%s)))")
+            params[0:0] = [user_id, user_id, user_id]
+        where = "WHERE " + " AND ".join(conditions) if conditions else ""
+        rows = fetch_all(f"""SELECT a.entity_name item,a.entity_name account,u.name owner,a.lifecycle_status status,COALESCE(a.next_follow_up_date,a.updated_at) relevant_date FROM accounts a JOIN users u ON u.id=a.owner_id {where} ORDER BY relevant_date DESC""", tuple(params))
+    query = filters["q"].lower()
+    if query: rows = [r for r in rows if query in " ".join(str(v or "") for v in r.values()).lower()]
+    if filters["owner"]: rows = [r for r in rows if r["owner"] == filters["owner"]]
+    if filters["status"]: rows = [r for r in rows if r["status"] == filters["status"]]
+    if invalid_date:
+        rows = []
+    elif reversed_range:
         rows = []
     elif from_date or to_date:
         rows = filter_rows_by_date(rows, from_date, to_date)
     if request.args.get("export") == "csv":
         if role() != "Admin":
             flash("Only Admin can export reports.", "danger"); return redirect(url_for("reports", report=report))
-        out = StringIO(); writer = csv.DictWriter(out, fieldnames=["item", "account", "owner", "status", "relevant_date"]); writer.writeheader(); writer.writerows(rows)
+        if report == "activities":
+            export_rows = [{
+                "activity_date": row["relevant_date"], "account": row["account"],
+                "area": row["area"], "activity_type": row["item"],
+                "entered_by": row["owner"], "account_owner": row["account_owner"],
+                "notes": row["notes"], "next_action": row["next_action"],
+                "entry_time": row["entered_at"],
+            } for row in rows]
+            fieldnames = ["activity_date", "account", "area", "activity_type", "entered_by",
+                          "account_owner", "notes", "next_action", "entry_time"]
+        else:
+            export_rows = rows
+            fieldnames = ["item", "account", "owner", "status", "relevant_date"]
+        out = StringIO(); writer = csv.DictWriter(out, fieldnames=fieldnames); writer.writeheader(); writer.writerows(export_rows)
         return Response(out.getvalue(), mimetype="text/csv", headers={"Content-Disposition": f"attachment; filename={report}-report.csv"})
     return render_template("reports/index.html", report=report, report_rows=rows, filters=filters)
 

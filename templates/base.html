@@ -22,7 +22,9 @@
     <nav class="nav flex-column">
       <span class="nav-section-label">Workspace</span>
       <a href="{{ url_for('dashboard') }}" class="nav-link"><i class="bi bi-grid-1x2"></i> Dashboard</a>
+      {# Lead Form route is intentionally disabled for now.
       <a href="{{ url_for('lead_capture_form') }}" class="nav-link"><i class="bi bi-person-plus"></i> Lead Form</a>
+      #}
       <a href="{{ url_for('account_list') }}" class="nav-link"><i class="bi bi-building"></i> Accounts</a>
       <a href="{{ url_for('activities') }}" class="nav-link"><i class="bi bi-chat-square-text"></i> Activities</a>
       <a href="{{ url_for('my_tasks') }}" class="nav-link"><i class="bi bi-check2-square"></i> Tasks</a>
